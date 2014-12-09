@@ -36,7 +36,7 @@ void tcp_server::on_tcp_close(uv_handle_t* handle)
 void tcp_server::on_tcp_read(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf)
 {
 	auto tcp = reinterpret_cast<server_socket*>(stream->data);
-	auto server = reinterpret_cast<tcp_server*>(stream->loop->data);
+	auto server = tcp->manager();
 
 	if (nread > 0) {
 		auto buffer = tcp->input();
@@ -96,7 +96,7 @@ void tcp_server::on_data_write(uv_write_t* req, int status)
 	tcp->output()->free(block);
 
 	if (status < 0) {
-		auto server = reinterpret_cast<tcp_server*>(req->handle->loop->data);
+		auto server = tcp->manager();
 		server->disconnect(tcp);
 	}
 
@@ -106,7 +106,6 @@ void tcp_server::on_data_write(uv_write_t* req, int status)
 tcp_server::tcp_server(uv_loop_t* loop)
 {
 	_loop = loop;
-	//_loop->data = reinterpret_cast<void*>(this);
 
 	uv_tcp_init(loop, &_server);
 	_server.data = reinterpret_cast<void*>(this);

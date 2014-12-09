@@ -13,7 +13,7 @@ void tcp_client::on_connect(uv_connect_t* req, int status)
 				net::tcp_client::on_tcp_read);
 		
 		auto tcp = reinterpret_cast<client_socket*>(req->handle->data);
-		auto client = reinterpret_cast<tcp_client*>(req->handle->loop->data);
+		auto client = tcp->manager();
 
 		tcp->set_status(tcp_status::connected);
 
@@ -42,7 +42,7 @@ void tcp_client::on_tcp_alloc_buffer(uv_handle_t* handle, size_t suggested_size,
 void tcp_client::on_tcp_read(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf)
 {
 	auto tcp = reinterpret_cast<client_socket*>(stream->data);
-	auto client = reinterpret_cast<tcp_client*>(stream->loop->data);
+	auto client = tcp->manager();
 
 	if (nread > 0) {
 		auto buffer = tcp->input();
@@ -56,7 +56,7 @@ void tcp_client::on_tcp_read(uv_stream_t* stream, ssize_t nread, const uv_buf_t*
 void tcp_client::on_tcp_close(uv_handle_t* handle)
 {
 	auto tcp = reinterpret_cast<client_socket*>(handle->data);
-	auto client = reinterpret_cast<tcp_client*>(handle->loop->data);
+	auto client = tcp->manager();
 
 	client->_socket = nullptr;
 	delete tcp;
@@ -99,7 +99,7 @@ void tcp_client::on_data_write(uv_write_t* req, int status)
 	tcp->output()->free(block);
 
 	if (status < 0) {
-		auto client = reinterpret_cast<tcp_client*>(req->handle->loop->data);
+		auto client = tcp->manager();
 		client->disconnect();
 	}
 
@@ -126,7 +126,7 @@ bool tcp_client::disconnect()
 
 	_socket->set_status(tcp_status::destroy);
 
-	if (_tcp_close) _tcp_connect(_socket);
+	if (_tcp_close) _tcp_close(_socket);
 
 	uv_check_stop(&_send_loop);
 	uv_close(reinterpret_cast<uv_handle_t*>(_socket->socket()), tcp_client::on_tcp_close);
