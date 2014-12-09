@@ -32,8 +32,7 @@
 namespace net
 {
 
-class tcp_server;
-typedef tcp<tcp_server*> server_socket;
+typedef tcp<1024, 1024> server_socket;
 
 class tcp_server {
 

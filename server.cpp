@@ -11,7 +11,7 @@ void tcp_server::on_new_connection(uv_stream_t *socket, int status)
 
 	auto server = reinterpret_cast<tcp_server*>(socket->data);
 
-	auto _connect = new server_socket(server->_loop, server);
+	auto _connect = new server_socket(server->_loop);
 	auto con_socket = _connect->socket();
 
 	if (uv_accept(socket, reinterpret_cast<uv_stream_t*>(con_socket)) == 0) {
@@ -28,7 +28,7 @@ void tcp_server::on_new_connection(uv_stream_t *socket, int status)
 void tcp_server::on_tcp_close(uv_handle_t* handle)
 {
 	auto _tcp = reinterpret_cast<server_socket*>(handle->data);
-	auto server = _tcp->manager();
+	auto server = reinterpret_cast<tcp_server*>(handle->loop->data);
 
 	if (server->_tcp_close && _tcp->id() > 0) server->_tcp_close(_tcp);
 
@@ -38,7 +38,7 @@ void tcp_server::on_tcp_close(uv_handle_t* handle)
 void tcp_server::on_tcp_read(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf)
 {
 	auto _tcp = reinterpret_cast<server_socket*>(stream->data);
-	auto server = _tcp->manager();
+	auto server = reinterpret_cast<tcp_server*>(stream->loop->data);
 
 	if (nread > 0) {
 		auto buffer = _tcp->input();
@@ -99,7 +99,7 @@ void tcp_server::on_data_write(uv_write_t* req, int status)
 	auto _tcp = reinterpret_cast<server_socket*>(req->handle->data);
 	_tcp->output().free(block);
 
-	auto server = _tcp->manager();
+	auto server = reinterpret_cast<tcp_server*>(req->handle->loop->data);
 	auto it = server->_sending_count.find(_tcp->id());
 	if (it != server->_sending_count.end()) {
 		it->second -= 1;
@@ -127,13 +127,15 @@ tcp_server::tcp_server(uv_loop_t* loop)
 
 tcp_server::~tcp_server()
 {
+	uv_prepare_stop(&_send_loop);
 }
 
 bool tcp_server::listen(char* ip, int port, int backlog)
 {
 	struct sockaddr_in bind_addr;
-	uv_ip4_addr(ip, port, &bind_addr);
-	uv_tcp_bind(&_server, reinterpret_cast<struct sockaddr*>(&bind_addr), 0);
+	if (uv_ip4_addr(ip, port, &bind_addr) != 0) return false;
+	if (uv_tcp_bind(&_server, reinterpret_cast<struct sockaddr*>(&bind_addr), 0) != 0) return false;
+	
 	if (uv_listen(reinterpret_cast<uv_stream_t*>(&_server), backlog, tcp_server::on_new_connection) != 0) {
 		return false;
 	} else {
