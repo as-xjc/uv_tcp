@@ -144,11 +144,10 @@ bool tcp_client::connect(char* ip, int port)
 {
 	assert(_socket == nullptr);
 
-	_socket = new client_socket(_loop, this);
-
 	struct sockaddr_in dest;
 	if (uv_ip4_addr(ip, port, &dest) != 0) return false;
 
+	_socket = new client_socket(_loop, this);
 	uv_connect_t* connect = new uv_connect_t;
 	int r = uv_tcp_connect(connect, _socket->socket(), 
 			reinterpret_cast<struct sockaddr*>(&dest), 
