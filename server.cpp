@@ -86,9 +86,7 @@ void tcp_server::send_loop(uv_prepare_t* handle)
 				.len = block->size()
 			};
 
-			if (uv_write(req, reinterpret_cast<uv_stream_t*>(socket), &buf, 1, net::tcp_server::on_data_write) == 0) {
-				server->_sending_count[tcp->id()] += 1;
-			}
+			uv_write(req, reinterpret_cast<uv_stream_t*>(socket), &buf, 1, net::tcp_server::on_data_write);
 		}
 	}
 }
@@ -99,14 +97,8 @@ void tcp_server::on_data_write(uv_write_t* req, int status)
 	auto _tcp = reinterpret_cast<server_socket*>(req->handle->data);
 	_tcp->output().free(block);
 
-	auto server = reinterpret_cast<tcp_server*>(req->handle->loop->data);
-	auto it = server->_sending_count.find(_tcp->id());
-	if (it != server->_sending_count.end()) {
-		it->second -= 1;
-		if (it->second < 1) server->_sending_count.erase(_tcp->id());
-	}
-
 	if (status < 0) {
+		auto server = reinterpret_cast<tcp_server*>(req->handle->loop->data);
 		server->disconnect(_tcp);
 	}
 
@@ -154,17 +146,13 @@ bool tcp_server::disconnect(size_t id)
 
 bool tcp_server::disconnect(server_socket* tcp)
 {
+	if (tcp->status() == tcp_status::destroy) return true;
+
 	tcp->set_status(tcp_status::destroy);
 
 	size_t id = tcp->id();
-	if (_sending_count.find(id) != _sending_count.end()) {
-		uv_read_stop(reinterpret_cast<uv_stream_t*>(tcp->socket()));
-
-	} else {
-		if (id > 0) _tcps.erase(id);
-
-		uv_close(reinterpret_cast<uv_handle_t*>(tcp->socket()), tcp_server::on_tcp_close);
-	}
+	if (id > 0) _tcps.erase(id);
+	uv_close(reinterpret_cast<uv_handle_t*>(tcp->socket()), tcp_server::on_tcp_close);
 
 	return true;
 }
@@ -194,6 +182,8 @@ bool tcp_server::send(size_t id, char* src, size_t len)
 	if (result == _tcps.end()) return false;
 
 	auto _tcp = result->second;
+	if (_tcp->status() != tcp_status::connected) return false;
+
 	_tcp->output().write(src, len);
 
 	return true;

@@ -42,12 +42,7 @@ public:
 
 	bool listen(char* ip, int port, int backlog = 128);
 	bool disconnect(size_t id);
-	bool disconnect(server_socket* tcp);
-
 	bool is_connect(size_t id);
-
-	size_t add(server_socket* tcp);
-
 	bool send(size_t id, char* src, size_t len);
 
 	void set_tcp_connection_cb(std::function<void(server_socket*)> cb);
@@ -63,8 +58,10 @@ private:
 
 	size_t _id = 0;
 
+	size_t add(server_socket* tcp);
+	bool disconnect(server_socket* tcp);
+
 	std::map<int, server_socket*> _tcps;
-	std::map<size_t, size_t> _sending_count;
 
 	std::function<void(server_socket*)> _tcp_close;
 	std::function<void(server_socket*)> _tcp_read;
