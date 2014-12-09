@@ -7,21 +7,22 @@ namespace net
 
 void tcp_client::on_connect(uv_connect_t* req, int status)
 {
+	auto tcp = reinterpret_cast<client_socket*>(req->handle->data);
+	auto client = tcp->manager();
+
 	if (status == 0) {
 		uv_read_start(req->handle, 
 				net::tcp_client::on_tcp_alloc_buffer, 
 				net::tcp_client::on_tcp_read);
 		
-		auto tcp = reinterpret_cast<client_socket*>(req->handle->data);
-		auto client = tcp->manager();
-
 		tcp->set_status(tcp_status::connected);
 
 		if (client->_tcp_connect) client->_tcp_connect(tcp);
 
 		uv_check_start(&(client->_send_loop), net::tcp_client::send_loop);
 	} else {
-
+		delete client->_socket;
+		client->_socket = nullptr;
 	}
 
 	delete req;
