@@ -1,5 +1,4 @@
 #include <tuple>
-#include <cstdio>
 #include "server.hpp"
 
 namespace net
@@ -15,7 +14,10 @@ void tcp_server::on_new_connection(uv_stream_t *socket, int status)
 	auto con_socket = _connect->socket();
 
 	if (uv_accept(socket, reinterpret_cast<uv_stream_t*>(con_socket)) == 0) {
-		uv_read_start(reinterpret_cast<uv_stream_t*>(con_socket), tcp_server::on_tcp_alloc_buffer, tcp_server::on_tcp_read);
+		uv_read_start(reinterpret_cast<uv_stream_t*>(con_socket), 
+				tcp_server::on_tcp_alloc_buffer, 
+				tcp_server::on_tcp_read);
+
 		server->add(_connect);
 
 		if (server->_tcp_connect) server->_tcp_connect(_connect);
@@ -27,36 +29,32 @@ void tcp_server::on_new_connection(uv_stream_t *socket, int status)
 
 void tcp_server::on_tcp_close(uv_handle_t* handle)
 {
-	auto _tcp = reinterpret_cast<server_socket*>(handle->data);
-	auto server = reinterpret_cast<tcp_server*>(handle->loop->data);
-
-	if (server->_tcp_close && _tcp->id() > 0) server->_tcp_close(_tcp);
-
-	delete _tcp;
+	auto tcp = reinterpret_cast<server_socket*>(handle->data);
+	delete tcp;
 }
 
 void tcp_server::on_tcp_read(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf)
 {
-	auto _tcp = reinterpret_cast<server_socket*>(stream->data);
+	auto tcp = reinterpret_cast<server_socket*>(stream->data);
 	auto server = reinterpret_cast<tcp_server*>(stream->loop->data);
 
 	if (nread > 0) {
-		auto buffer = _tcp->input();
-		buffer.skip(buffer::skip_type::write, nread);
-		if (server->_tcp_read) server->_tcp_read(_tcp);
+		auto buffer = tcp->input();
+		buffer->skip(buffer::skip_type::write, nread);
+		if (server->_tcp_read) server->_tcp_read(tcp);
 	} else {
-		server->disconnect(_tcp);
+		server->disconnect(tcp);
 	}
 }
 
 void tcp_server::on_tcp_alloc_buffer(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf)
 {
-	auto _tcp = reinterpret_cast<server_socket*>(handle->data);
-	auto buffer = _tcp->input();
+	auto tcp = reinterpret_cast<server_socket*>(handle->data);
+	auto buffer = tcp->input();
 
 	void* buff = nullptr;
 	size_t len = 0;
-	std::tie(buff, len) = buffer.malloc();
+	std::tie(buff, len) = buffer->malloc();
 	buf->base = reinterpret_cast<char*>(buff);
 	buf->len = len;
 }
@@ -65,16 +63,15 @@ void tcp_server::send_loop(uv_prepare_t* handle)
 {
 	tcp_server* server = reinterpret_cast<tcp_server*>(handle->data);
 
-	for (auto& it : server->_tcps) {
+	for (auto it : server->_tcps) {
 		auto tcp = it.second;
-		auto socket = tcp->socket();
-
+		auto buffer = tcp->output();
 		for (;;) {
-			auto block = tcp->output().pop();
+			auto block = buffer->pop();
 			if (block == nullptr) break;
 
 			if (block->size() < 1) {
-				tcp->output().free(block);
+				buffer->free(block);
 				continue;
 			}
 
@@ -86,7 +83,8 @@ void tcp_server::send_loop(uv_prepare_t* handle)
 				.len = block->size()
 			};
 
-			uv_write(req, reinterpret_cast<uv_stream_t*>(socket), &buf, 1, net::tcp_server::on_data_write);
+			uv_write(req, reinterpret_cast<uv_stream_t*>(tcp->socket()), 
+					&buf, 1, net::tcp_server::on_data_write);
 		}
 	}
 }
@@ -94,12 +92,12 @@ void tcp_server::send_loop(uv_prepare_t* handle)
 void tcp_server::on_data_write(uv_write_t* req, int status)
 {
 	auto block = reinterpret_cast<buffer::block*>(req->data);
-	auto _tcp = reinterpret_cast<server_socket*>(req->handle->data);
-	_tcp->output().free(block);
+	auto tcp = reinterpret_cast<server_socket*>(req->handle->data);
+	tcp->output()->free(block);
 
 	if (status < 0) {
 		auto server = reinterpret_cast<tcp_server*>(req->handle->loop->data);
-		server->disconnect(_tcp);
+		server->disconnect(tcp);
 	}
 
 	delete req;
@@ -152,6 +150,8 @@ bool tcp_server::disconnect(server_socket* tcp)
 
 	size_t id = tcp->id();
 	if (id > 0) _tcps.erase(id);
+	if (_tcp_close && id > 0) _tcp_close(tcp);
+
 	uv_close(reinterpret_cast<uv_handle_t*>(tcp->socket()), tcp_server::on_tcp_close);
 
 	return true;
@@ -181,10 +181,10 @@ bool tcp_server::send(size_t id, char* src, size_t len)
 	auto result = _tcps.find(id);
 	if (result == _tcps.end()) return false;
 
-	auto _tcp = result->second;
-	if (_tcp->status() != tcp_status::connected) return false;
+	auto tcp = result->second;
+	if (tcp->status() != tcp_status::connected) return false;
 
-	_tcp->output().write(src, len);
+	tcp->output()->write(src, len);
 
 	return true;
 }
@@ -196,17 +196,17 @@ size_t tcp_server::gen_id()
 	return new_id;
 }
 
-inline void tcp_server::set_tcp_connection_cb(std::function<void(server_socket*)> cb)
+void tcp_server::set_connection_cb(std::function<void(server_socket*)> cb)
 {
 	_tcp_connect = cb;
 }
 
-inline void tcp_server::set_tcp_close_cb(std::function<void(server_socket*)> cb)
+void tcp_server::set_close_cb(std::function<void(server_socket*)> cb)
 {
 	_tcp_close = cb;
 }
 
-inline void tcp_server::set_tcp_read_cb(std::function<void(server_socket*)> cb)
+void tcp_server::set_read_cb(std::function<void(server_socket*)> cb)
 {
 	_tcp_read = cb;
 }

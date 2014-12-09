@@ -23,7 +23,6 @@
 
 #pragma once
 
-#include <map>
 #include <uv.h>
 #include <functional>
 
@@ -32,45 +31,36 @@
 namespace net
 {
 
-typedef tcp<1024, 1024> server_socket;
+typedef tcp<1024, 1024> client_socket;
 
-class tcp_server {
+class tcp_client {
 
 public:
-	tcp_server(uv_loop_t* loop);
-	~tcp_server();
+	tcp_client(uv_loop_t* loop);
+	~tcp_client();
 
-	bool listen(char* ip, int port, int backlog = 128);
-	bool disconnect(size_t id);
-	bool is_connect(size_t id);
-	bool send(size_t id, char* src, size_t len);
+	bool disconnect();
+	bool is_connect();
+	bool connect(char* ip, int port);
+	bool send(char* src, size_t len);
 
-	void set_connection_cb(std::function<void(server_socket*)> cb);
-	void set_close_cb(std::function<void(server_socket*)> cb);
-	void set_read_cb(std::function<void(server_socket*)> cb);
+	void set_tcp_connection_cb(std::function<void(client_socket*)> cb);
+	void set_tcp_close_cb(std::function<void(client_socket*)> cb);
+	void set_read_cb(std::function<void(client_socket*)> cb);
 
 private:
-	size_t gen_id();
-
-	uv_tcp_t _server;
-	uv_prepare_t _send_loop;
 	uv_loop_t* _loop;
+	client_socket* _socket;
+	uv_prepare_t _send_loop;
 
-	size_t _id = 0;
+	std::function<void(client_socket*)> _tcp_read;
+	std::function<void(client_socket*)> _tcp_connect;
+	std::function<void(client_socket*)> _tcp_close;
 
-	size_t add(server_socket* tcp);
-	bool disconnect(server_socket* tcp);
-
-	std::map<int, server_socket*> _tcps;
-
-	std::function<void(server_socket*)> _tcp_close;
-	std::function<void(server_socket*)> _tcp_read;
-	std::function<void(server_socket*)> _tcp_connect;
-
-	static void on_tcp_close(uv_handle_t* handle);
-	static void on_new_connection(uv_stream_t *socket, int status);
-	static void on_tcp_read(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf);
+	static void on_connect(uv_connect_t* req, int status);
 	static void on_tcp_alloc_buffer(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf);
+	static void on_tcp_read(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf);
+	static void on_tcp_close(uv_handle_t* handle);
 	static void send_loop(uv_prepare_t* handle);
 	static void on_data_write(uv_write_t* req, int status);
 };

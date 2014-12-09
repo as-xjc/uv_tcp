@@ -52,8 +52,8 @@ public:
 	inline size_t id() const {return _id;}
 	inline void set_id(size_t id) {_id = id;}
 
-	inline buffer::block_buffer& input() {return _input;}
-	inline buffer::block_buffer& output() {return _output;}
+	inline buffer::block_buffer* input() {return &_input;}
+	inline buffer::block_buffer* output() {return &_output;}
 
 	inline tcp_status status() {return _status;}
 	inline void set_status(tcp_status status) {_status = status;}
