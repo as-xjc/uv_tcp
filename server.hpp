@@ -32,7 +32,8 @@
 namespace net
 {
 
-typedef tcp<1024, 1024> server_socket;
+class tcp_server;
+typedef tcp<tcp_server*, 1024, 1024> server_socket;
 
 class tcp_server {
 
@@ -53,7 +54,7 @@ private:
 	size_t gen_id();
 
 	uv_tcp_t _server;
-	uv_prepare_t _send_loop;
+	uv_check_t _send_loop;
 	uv_loop_t* _loop;
 
 	size_t _id = 0;
@@ -71,7 +72,7 @@ private:
 	static void on_new_connection(uv_stream_t *socket, int status);
 	static void on_tcp_read(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf);
 	static void on_tcp_alloc_buffer(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf);
-	static void send_loop(uv_prepare_t* handle);
+	static void send_loop(uv_check_t* handle);
 	static void on_data_write(uv_write_t* req, int status);
 };
 

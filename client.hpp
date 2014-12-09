@@ -31,7 +31,8 @@
 namespace net
 {
 
-typedef tcp<1024, 1024> client_socket;
+class tcp_client;
+typedef tcp<tcp_client*, 1024, 1024> client_socket;
 
 class tcp_client {
 
@@ -49,9 +50,9 @@ public:
 	void set_read_cb(std::function<void(client_socket*)> cb);
 
 private:
-	uv_loop_t* _loop;
-	client_socket* _socket;
-	uv_prepare_t _send_loop;
+	uv_loop_t* _loop = nullptr;
+	client_socket* _socket = nullptr;
+	uv_check_t _send_loop;
 
 	std::function<void(client_socket*)> _tcp_read;
 	std::function<void(client_socket*)> _tcp_connect;
@@ -61,7 +62,7 @@ private:
 	static void on_tcp_alloc_buffer(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf);
 	static void on_tcp_read(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf);
 	static void on_tcp_close(uv_handle_t* handle);
-	static void send_loop(uv_prepare_t* handle);
+	static void send_loop(uv_check_t* handle);
 	static void on_data_write(uv_write_t* req, int status);
 };
 

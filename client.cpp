@@ -1,4 +1,5 @@
 #include <tuple>
+#include <cassert>
 #include "client.hpp"
 
 namespace net
@@ -7,7 +8,9 @@ namespace net
 void tcp_client::on_connect(uv_connect_t* req, int status)
 {
 	if (status == 0) {
-		uv_read_start(req->handle, net::tcp_client::on_tcp_alloc_buffer, net::tcp_client::on_tcp_read);
+		uv_read_start(req->handle, 
+				net::tcp_client::on_tcp_alloc_buffer, 
+				net::tcp_client::on_tcp_read);
 		
 		auto tcp = reinterpret_cast<client_socket*>(req->handle->data);
 		auto client = reinterpret_cast<tcp_client*>(req->handle->loop->data);
@@ -16,7 +19,7 @@ void tcp_client::on_connect(uv_connect_t* req, int status)
 
 		if (client->_tcp_connect) client->_tcp_connect(tcp);
 
-		uv_prepare_start(&(client->_send_loop), net::tcp_client::send_loop);
+		uv_check_start(&(client->_send_loop), net::tcp_client::send_loop);
 	} else {
 
 	}
@@ -52,11 +55,18 @@ void tcp_client::on_tcp_read(uv_stream_t* stream, ssize_t nread, const uv_buf_t*
 
 void tcp_client::on_tcp_close(uv_handle_t* handle)
 {
+	auto tcp = reinterpret_cast<client_socket*>(handle->data);
+	auto client = reinterpret_cast<tcp_client*>(handle->loop->data);
+
+	client->_socket = nullptr;
+	delete tcp;
 }
 
-void tcp_client::send_loop(uv_prepare_t* handle)
+void tcp_client::send_loop(uv_check_t* handle)
 {
 	tcp_client* client = reinterpret_cast<tcp_client*>(handle->data);
+
+	if (client->_socket == nullptr) return;
 
 	auto tcp = client->_socket;
 	auto buffer = tcp->output();
@@ -77,7 +87,8 @@ void tcp_client::send_loop(uv_prepare_t* handle)
 			.len = block->size()
 		};
 
-		uv_write(req, reinterpret_cast<uv_stream_t*>(tcp->socket()), &buf, 1, net::tcp_client::on_data_write);
+		uv_write(req, reinterpret_cast<uv_stream_t*>(tcp->socket()), 
+				&buf, 1, net::tcp_client::on_data_write);
 	}
 }
 
@@ -97,21 +108,15 @@ void tcp_client::on_data_write(uv_write_t* req, int status)
 
 tcp_client::tcp_client(uv_loop_t* loop)
 {
-	_socket = new client_socket(loop);
-
 	_loop = loop;
-	_loop->data = reinterpret_cast<void*>(this);
 
-	uv_prepare_init(loop, &_send_loop);
+	uv_check_init(loop, &_send_loop);
 	_send_loop.data = reinterpret_cast<void*>(this);
 }
 
 tcp_client::~tcp_client()
 {
-	uv_prepare_stop(&_send_loop);
 	disconnect();
-
-	delete _socket;
 }
 
 bool tcp_client::disconnect()
@@ -123,6 +128,7 @@ bool tcp_client::disconnect()
 
 	if (_tcp_close) _tcp_connect(_socket);
 
+	uv_check_stop(&_send_loop);
 	uv_close(reinterpret_cast<uv_handle_t*>(_socket->socket()), tcp_client::on_tcp_close);
 
 	return true;
@@ -136,11 +142,24 @@ bool tcp_client::is_connect()
 
 bool tcp_client::connect(char* ip, int port)
 {
+	assert(_socket == nullptr);
+
+	_socket = new client_socket(_loop, this);
+
 	struct sockaddr_in dest;
 	if (uv_ip4_addr(ip, port, &dest) != 0) return false;
 
 	uv_connect_t* connect = new uv_connect_t;
-	return uv_tcp_connect(connect, _socket->socket(), reinterpret_cast<struct sockaddr*>(&dest), net::tcp_client::on_connect) == 0;
+	int r = uv_tcp_connect(connect, _socket->socket(), 
+			reinterpret_cast<struct sockaddr*>(&dest), 
+			net::tcp_client::on_connect);
+
+	if (r != 0) {
+		delete _socket;
+		_socket = nullptr;
+	}
+
+	return r == 0;
 }
 	
 bool tcp_client::send(char* src, size_t len)

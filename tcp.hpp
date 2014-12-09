@@ -33,15 +33,19 @@ namespace net
 
 enum class tcp_status {init, connected, destroy};
 
-template <size_t input_block_size = 1024, size_t output_block_size = 1024>
+template <typename T, size_t input_block_size = 1024, size_t output_block_size = 1024>
 class tcp {
 
+static_assert(std::is_pointer<T>::value, "template T must be pointer");
+
 public:
-	tcp(uv_loop_t* loop):
+	tcp(uv_loop_t* loop, T manager):
 		_input(input_block_size),
-		_output(output_block_size)
+		_output(output_block_size),
+		_manager(manager)
 	{
 		assert(loop != nullptr);
+		assert(_manager != nullptr);
 
 		_socket.data = reinterpret_cast<void*>(this);
 		uv_tcp_init(loop, &_socket);
@@ -60,9 +64,12 @@ public:
 
 	inline uv_tcp_t* socket() {return &_socket;}
 
+	inline T manager() {return _manager;}
+
 private:
 	size_t _id = 0;
 
+	const T _manager;
 	uv_tcp_t _socket;
 	tcp_status _status = tcp_status::init;
 

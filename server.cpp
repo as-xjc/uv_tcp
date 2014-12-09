@@ -10,7 +10,7 @@ void tcp_server::on_new_connection(uv_stream_t *socket, int status)
 
 	auto server = reinterpret_cast<tcp_server*>(socket->data);
 
-	auto _connect = new server_socket(server->_loop);
+	auto _connect = new server_socket(server->_loop, server);
 	auto con_socket = _connect->socket();
 
 	if (uv_accept(socket, reinterpret_cast<uv_stream_t*>(con_socket)) == 0) {
@@ -59,7 +59,7 @@ void tcp_server::on_tcp_alloc_buffer(uv_handle_t* handle, size_t suggested_size,
 	buf->len = len;
 }
 
-void tcp_server::send_loop(uv_prepare_t* handle)
+void tcp_server::send_loop(uv_check_t* handle)
 {
 	tcp_server* server = reinterpret_cast<tcp_server*>(handle->data);
 
@@ -106,18 +106,23 @@ void tcp_server::on_data_write(uv_write_t* req, int status)
 tcp_server::tcp_server(uv_loop_t* loop)
 {
 	_loop = loop;
-	_loop->data = reinterpret_cast<void*>(this);
+	//_loop->data = reinterpret_cast<void*>(this);
 
 	uv_tcp_init(loop, &_server);
 	_server.data = reinterpret_cast<void*>(this);
 
-	uv_prepare_init(loop, &_send_loop);
+	uv_check_init(loop, &_send_loop);
 	_send_loop.data = reinterpret_cast<void*>(this);
 }
 
 tcp_server::~tcp_server()
 {
-	uv_prepare_stop(&_send_loop);
+	for (auto it: _tcps) {
+		it.second->set_status(tcp_status::destroy);
+		uv_close(reinterpret_cast<uv_handle_t*>(it.second->socket()), tcp_server::on_tcp_close);
+	}
+
+	uv_check_stop(&_send_loop);
 }
 
 bool tcp_server::listen(char* ip, int port, int backlog)
@@ -129,7 +134,7 @@ bool tcp_server::listen(char* ip, int port, int backlog)
 	if (uv_listen(reinterpret_cast<uv_stream_t*>(&_server), backlog, tcp_server::on_new_connection) != 0) {
 		return false;
 	} else {
-		uv_prepare_start(&_send_loop, tcp_server::send_loop);
+		uv_check_start(&_send_loop, tcp_server::send_loop);
 		return true;
 	}
 }
