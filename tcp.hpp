@@ -45,7 +45,7 @@ public:
 		_manager(manager)
 	{
 		assert(loop != nullptr);
-		assert(_manager != nullptr);
+		assert(manager != nullptr);
 
 		_socket.data = reinterpret_cast<void*>(this);
 		uv_tcp_init(loop, &_socket);
