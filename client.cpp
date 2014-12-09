@@ -1,5 +1,4 @@
 #include <tuple>
-#include <cstdio>
 #include "client.hpp"
 
 namespace net
