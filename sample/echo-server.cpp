@@ -11,8 +11,7 @@ int main(int argc, char* argv[])
 			size_t len = tcp->input()->size();
 			std::cout << "server revc " << len << std::endl;
 			//tcp->input()->debug(buffer::debug_type::chars);
-			tcp->output()->append(*(tcp->input()));
-			tcp->input()->clear();
+			tcp->output()->write(*(tcp->input()));
 	});
 
 	a.set_connection_cb([](net::server_socket* tcp){
