@@ -54,22 +54,23 @@ public:
 	~tcp() {}
 
 	inline size_t id() const {return _id;}
-	inline void set_id(size_t id) {_id = id;}
+	inline void id(size_t id) {_id = id;}
 
 	inline buffer::block_buffer* input() {return &_input;}
 	inline buffer::block_buffer* output() {return &_output;}
 
 	inline tcp_status status() {return _status;}
-	inline void set_status(tcp_status status) {_status = status;}
+	inline void status(tcp_status status) {_status = status;}
 
 	inline uv_tcp_t* socket() {return &_socket;}
 
 	inline T manager() {return _manager;}
+	inline void clean_manager() {_manager = nullptr;}
 
 private:
 	size_t _id = 0;
 
-	const T _manager;
+	T _manager;
 	uv_tcp_t _socket;
 	tcp_status _status = tcp_status::init;
 

@@ -117,7 +117,7 @@ tcp_server::tcp_server(uv_loop_t* loop)
 tcp_server::~tcp_server()
 {
 	for (auto it: _tcps) {
-		it.second->set_status(tcp_status::destroy);
+		it.second->status(tcp_status::destroy);
 		uv_close(reinterpret_cast<uv_handle_t*>(it.second->socket()), tcp_server::on_tcp_close);
 	}
 
@@ -150,7 +150,7 @@ bool tcp_server::disconnect(server_socket* tcp)
 {
 	if (tcp->status() == tcp_status::destroy) return true;
 
-	tcp->set_status(tcp_status::destroy);
+	tcp->status(tcp_status::destroy);
 
 	size_t id = tcp->id();
 	if (id > 0) _tcps.erase(id);
@@ -174,8 +174,8 @@ bool tcp_server::is_connect(size_t id)
 size_t tcp_server::add(server_socket* tcp)
 {
 	size_t new_id =  this->gen_id();
-	tcp->set_id(new_id);
-	tcp->set_status(tcp_status::connected);
+	tcp->id(new_id);
+	tcp->status(tcp_status::connected);
 	this->_tcps[new_id] = tcp;
 	return new_id;
 }

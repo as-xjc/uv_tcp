@@ -10,12 +10,14 @@ void tcp_client::on_connect(uv_connect_t* req, int status)
 	auto tcp = reinterpret_cast<client_socket*>(req->handle->data);
 	auto client = tcp->manager();
 
+	assert(client != nullptr);
+
 	if (status == 0) {
 		uv_read_start(req->handle, 
 				net::tcp_client::on_tcp_alloc_buffer, 
 				net::tcp_client::on_tcp_read);
 		
-		tcp->set_status(tcp_status::connected);
+		tcp->status(tcp_status::connected);
 
 		if (client->_tcp_connect) client->_tcp_connect(tcp);
 
@@ -58,8 +60,8 @@ void tcp_client::on_tcp_close(uv_handle_t* handle)
 {
 	auto tcp = reinterpret_cast<client_socket*>(handle->data);
 	auto client = tcp->manager();
+	if (client != nullptr) client->_socket = nullptr;
 
-	client->_socket = nullptr;
 	delete tcp;
 }
 
@@ -117,15 +119,22 @@ tcp_client::tcp_client(uv_loop_t* loop)
 
 tcp_client::~tcp_client()
 {
-	disconnect();
+	if (_socket == nullptr) return;
+
+	if (_socket->status() == tcp_status::connected) {
+		if (_tcp_close) _tcp_close(_socket);
+
+		uv_check_stop(&_send_loop);
+		uv_close(reinterpret_cast<uv_handle_t*>(_socket->socket()), tcp_client::on_tcp_close);
+	}
+	_socket->clean_manager();
 }
 
 bool tcp_client::disconnect()
 {
-	if (_socket == nullptr) return true;
-	if (_socket->status() == tcp_status::destroy) return true;
+	if (!is_connect()) return true;
 
-	_socket->set_status(tcp_status::destroy);
+	_socket->status(tcp_status::destroy);
 
 	if (_tcp_close) _tcp_close(_socket);
 
@@ -164,8 +173,7 @@ bool tcp_client::connect(char* ip, int port)
 	
 bool tcp_client::send(char* src, size_t len)
 {
-	if (_socket == nullptr) return false;
-	if (_socket->status() != tcp_status::connected) return false;
+	if (!is_connect()) return false;
 
 	_socket->output()->write(src, len);
 	return true;
